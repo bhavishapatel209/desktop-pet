@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-🐱 Desktop Pet — A smart cat that lives on your macOS desktop!
+🐱 Desktop Pet — A smooth cartoon cat that lives on your macOS desktop!
 
-A floating animated cat that wanders around your screen.
-It walks, naps, plays, gets curious, follows your cursor, and chats
-in little speech bubbles.
+A floating animated orange tabby that wanders around your screen.
+It walks, runs, sits, grooms itself (licks its body), naps, plays,
+and follows your cursor — all drawn as smooth vector shapes.
 
   • Left-click + drag  → pick up and move the cat
   • Right-click        → menu (change state / quit)
@@ -14,124 +14,325 @@ Install: pip install PySide6
 Run:     python desktop_pet.py
 """
 
+import os
 import sys
+import math
 import random
 
-from PySide6.QtCore import Qt, QTimer, QPoint, QRect
+from PySide6.QtCore import Qt, QTimer, QPoint, QRect, QPointF, QRectF
 from PySide6.QtGui import (
-    QPainter, QFont, QColor, QPen, QBrush, QFontMetrics, QCursor,
+    QPainter,
+    QFont,
+    QColor,
+    QPen,
+    QBrush,
+    QFontMetrics,
+    QCursor,
+    QPainterPath,
+    QRadialGradient,
 )
 from PySide6.QtWidgets import QApplication, QWidget, QMenu
 
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Layout
 # ---------------------------------------------------------------------------
-WIDGET_W       = 130     # widget width
-WIDGET_H       = 200     # widget height (extra room for thought bubble on top)
-EMOJI_SIZE     = 80      # pet emoji font size — larger = more visible
-TICK_MS        = 120     # animation tick interval
+WIDGET_W = 260
+WIDGET_H = 220
+TICK_MS = 100
+GROUND_Y = WIDGET_H - 22          # baseline the cat stands on
 
-# Animation frames per state
-FRAMES = {
-    "idle":    ["🐱", "😺", "🐱", "😼"],
-    "walk":    ["🐈", "🐱", "🐈", "🐱"],
-    "run":     ["🐈", "🐈\u200d⬛", "🐈", "🐈\u200d⬛"],
-    "sleep":   ["😴", "💤", "😴", "💤"],
-    "play":    ["😸", "😺", "🙀", "😺"],
-    "curious": ["😼", "🐱", "😼", "🐱"],
-}
+# ---------------------------------------------------------------------------
+# Orange-tabby colour palette
+# ---------------------------------------------------------------------------
+FUR        = QColor(240, 155, 60)
+FUR_DARK   = QColor(205, 118, 38)
+FUR_STRIPE = QColor(185, 105, 30)
+BELLY      = QColor(255, 220, 175)
+EAR_PINK   = QColor(255, 175, 165)
+NOSE_PINK  = QColor(255, 140, 140)
+EYE_GREEN  = QColor(85, 195, 85)
+PUPIL_CLR  = QColor(22, 22, 28)
+EYE_WHITE  = QColor(255, 255, 255, 230)
+WHISKER_C  = QColor(75, 75, 75, 160)
+TONGUE_C   = QColor(255, 145, 155)
+OUTLINE_C  = QColor(160, 95, 30, 70)
 
-# Horizontal movement speed (px/tick)
+# ---------------------------------------------------------------------------
+# Cat dimensions (px)
+# ---------------------------------------------------------------------------
+BODY_RX   = 38          # body ellipse semi-width
+BODY_RY   = 22          # body ellipse semi-height
+HEAD_R    = 24           # head circle radius
+EAR_W     = 12
+EAR_H     = 17
+LEG_W     = 10
+LEG_H     = 22
+TAIL_W    = 7
+
+# ---------------------------------------------------------------------------
+# Behaviour — states / speeds / transitions
+# ---------------------------------------------------------------------------
 SPEEDS = {
-    "idle":    0,
-    "walk":    3,
-    "run":     9,
-    "sleep":   0,
-    "play":    2,
-    "curious": 5,
+    "idle": 0, "walk": 3, "run": 9, "sleep": 0,
+    "play": 2, "curious": 5, "groom": 0,
 }
-
-# State duration in ticks (1 tick ≈ TICK_MS ms)
 DURATIONS = {
-    "idle":    (25, 60),
-    "walk":    (50, 130),
-    "run":     (20, 45),
-    "sleep":   (60, 150),
-    "play":    (25, 55),
-    "curious": (30, 70),
+    "idle": (25, 60), "walk": (50, 130), "run": (20, 45),
+    "sleep": (60, 150), "play": (25, 55), "curious": (30, 70),
+    "groom": (30, 70),
 }
-
-# Weighted next-state choices
 TRANSITIONS = {
-    "idle":    ["walk", "walk", "walk", "sleep", "play", "curious"],
-    "walk":    ["walk", "idle", "run", "sleep", "curious", "play"],
-    "run":     ["walk", "walk", "idle"],
-    "sleep":   ["sleep", "idle", "walk"],
-    "play":    ["walk", "idle", "play"],
-    "curious": ["walk", "idle", "play"],
+    "idle":    ["walk", "walk", "groom", "groom", "sleep", "play", "curious"],
+    "walk":    ["walk", "idle", "groom", "run", "curious", "sleep"],
+    "run":     ["walk", "idle", "walk"],
+    "sleep":   ["sleep", "idle", "groom", "walk"],
+    "play":    ["walk", "idle", "groom"],
+    "curious": ["walk", "idle", "groom"],
+    "groom":   ["idle", "walk", "groom", "sleep"],
 }
-
-# Random thoughts (shown in a speech bubble)
 THOUGHTS = [
     "meow~", "purrr...", "snack?", "zzz...", "boop?", "hooman?",
     "🐟?", "?", "...", "!", "🐾", "play?", "hi!",
 ]
+NFRAMES = {
+    "idle": 4, "walk": 8, "run": 6, "sleep": 4,
+    "play": 6, "curious": 8, "groom": 8,
+}
 
 
-# ---------------------------------------------------------------------------
-# Desktop Pet
-# ---------------------------------------------------------------------------
+# ╔═════════════════════════════════════════════════════════════════════════╗
+# ║  DRAWING HELPERS                                                       ║
+# ╚═════════════════════════════════════════════════════════════════════════╝
+
+def _outline_pen(width: float = 1.6) -> QPen:
+    return QPen(OUTLINE_C, width, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+
+
+def draw_body(p: QPainter, cx: float, cy: float,
+              rx: float = BODY_RX, ry: float = BODY_RY, angle: float = 0):
+    """Orange ellipse with lighter belly crescent."""
+    p.save()
+    p.translate(cx, cy)
+    if angle:
+        p.rotate(angle)
+    # Main fur
+    p.setPen(_outline_pen())
+    p.setBrush(QBrush(FUR))
+    p.drawEllipse(QRectF(-rx, -ry, rx * 2, ry * 2))
+    # Belly highlight (bottom-center)
+    belly_path = QPainterPath()
+    belly_path.addEllipse(QRectF(-rx * 0.55, -ry * 0.1, rx * 1.1, ry * 1.5))
+    p.setPen(Qt.NoPen)
+    p.setBrush(QBrush(BELLY))
+    p.setOpacity(0.45)
+    p.drawPath(belly_path)
+    p.setOpacity(1.0)
+    # Tabby stripes (3 arcs across back)
+    stripe_pen = QPen(FUR_STRIPE, 2.2, Qt.SolidLine, Qt.RoundCap)
+    p.setPen(stripe_pen)
+    p.setBrush(Qt.NoBrush)
+    for i, frac in enumerate([0.25, 0.48, 0.71]):
+        sx = -rx + rx * 2 * frac
+        p.drawArc(QRectF(sx - 6, -ry - 4, 12, ry * 1.2), 30 * 16, 120 * 16)
+    p.restore()
+
+
+def draw_head(p: QPainter, cx: float, cy: float,
+              eye_open: float = 1.0, look_back: bool = False):
+    """Full head: circle + ears + eyes + nose + mouth + whiskers."""
+    r = HEAD_R
+    p.save()
+    p.translate(cx, cy)
+
+    # -- Ears (behind head circle) --
+    for side in (-1, 1):
+        ex = side * (r - 4)
+        ey = -r + 2
+        ear = QPainterPath()
+        ear.moveTo(ex - EAR_W * 0.5, ey + 4)
+        ear.lineTo(ex, ey - EAR_H + 4)
+        ear.lineTo(ex + EAR_W * 0.5, ey + 4)
+        ear.closeSubpath()
+        p.setPen(_outline_pen())
+        p.setBrush(QBrush(FUR))
+        p.drawPath(ear)
+        # Inner pink
+        inner = QPainterPath()
+        inner.moveTo(ex - EAR_W * 0.28, ey + 3)
+        inner.lineTo(ex, ey - EAR_H * 0.55 + 4)
+        inner.lineTo(ex + EAR_W * 0.28, ey + 3)
+        inner.closeSubpath()
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(EAR_PINK))
+        p.drawPath(inner)
+
+    # -- Head circle --
+    p.setPen(_outline_pen())
+    p.setBrush(QBrush(FUR))
+    p.drawEllipse(QRectF(-r, -r, r * 2, r * 2))
+
+    # -- Tabby "M" on forehead --
+    m_pen = QPen(FUR_STRIPE, 1.6, Qt.SolidLine, Qt.RoundCap)
+    p.setPen(m_pen)
+    p.setBrush(Qt.NoBrush)
+    mp = QPainterPath()
+    mp.moveTo(-10, -6)
+    mp.quadTo(-5, -14, 0, -7)
+    mp.quadTo(5, -14, 10, -6)
+    p.drawPath(mp)
+
+    if look_back:
+        # Simplified profile — just the ear tips & back of head visible
+        p.restore()
+        return
+
+    # -- Eyes --
+    for side in (-1, 1):
+        ex = side * 9
+        ey = -2
+        ew = 7.5 * eye_open + 0.5
+        eh = 8.0 * eye_open + 0.5
+        if eye_open > 0.15:
+            # Sclera
+            p.setPen(Qt.NoPen)
+            p.setBrush(QBrush(EYE_WHITE))
+            p.drawEllipse(QPointF(ex, ey), ew, eh)
+            # Iris
+            p.setBrush(QBrush(EYE_GREEN))
+            p.drawEllipse(QPointF(ex, ey + 0.5), ew * 0.72, eh * 0.72)
+            # Pupil
+            p.setBrush(QBrush(PUPIL_CLR))
+            p.drawEllipse(QPointF(ex, ey + 0.8), ew * 0.35, eh * 0.55)
+            # Highlight
+            p.setBrush(QBrush(QColor(255, 255, 255, 200)))
+            p.drawEllipse(QPointF(ex - 1.5, ey - 2), 1.8, 1.8)
+        else:
+            # Closed — a curved line
+            p.setPen(QPen(PUPIL_CLR, 1.8, Qt.SolidLine, Qt.RoundCap))
+            p.setBrush(Qt.NoBrush)
+            p.drawArc(QRectF(ex - 5, ey - 2, 10, 6), 0, 180 * 16)
+
+    # -- Nose --
+    nose = QPainterPath()
+    nose.moveTo(0, 4)
+    nose.lineTo(-3.5, 0.5)
+    nose.lineTo(3.5, 0.5)
+    nose.closeSubpath()
+    p.setPen(Qt.NoPen)
+    p.setBrush(QBrush(NOSE_PINK))
+    p.drawPath(nose)
+
+    # -- Mouth --
+    p.setPen(QPen(FUR_DARK, 1.2, Qt.SolidLine, Qt.RoundCap))
+    p.setBrush(Qt.NoBrush)
+    mouth = QPainterPath()
+    mouth.moveTo(-4, 6.5)
+    mouth.quadTo(0, 10, 4, 6.5)
+    p.drawPath(mouth)
+
+    # -- Whiskers --
+    wp = QPen(WHISKER_C, 1.0, Qt.SolidLine, Qt.RoundCap)
+    p.setPen(wp)
+    for side in (-1, 1):
+        bx = side * 5
+        for angle_d in (-15, 0, 15):
+            rad = math.radians(angle_d)
+            length = 22
+            dx = side * length * math.cos(rad)
+            dy = length * math.sin(rad)
+            p.drawLine(QPointF(bx, 4), QPointF(bx + dx, 4 + dy))
+
+    p.restore()
+
+
+def draw_leg(p: QPainter, x: float, ground_y: float,
+             swing: float = 0, shorter: bool = False):
+    """One rounded-rectangle leg. *swing* moves the foot forward/back."""
+    h = LEG_H * (0.65 if shorter else 1.0)
+    top_y = ground_y - h
+    p.setPen(_outline_pen(1.2))
+    p.setBrush(QBrush(FUR_DARK))
+    path = QPainterPath()
+    foot_x = x + swing
+    path.moveTo(x - LEG_W / 2, top_y)
+    path.lineTo(foot_x - LEG_W / 2, ground_y - 4)
+    path.quadTo(foot_x - LEG_W / 2, ground_y, foot_x, ground_y)
+    path.quadTo(foot_x + LEG_W / 2, ground_y, foot_x + LEG_W / 2, ground_y - 4)
+    path.lineTo(x + LEG_W / 2, top_y)
+    path.closeSubpath()
+    p.drawPath(path)
+
+
+def draw_tail(p: QPainter, bx: float, by: float,
+              curl: float = 0.5, base_angle: float = 130):
+    """Bézier tail. curl ∈ [0,1] controls how curved it is."""
+    length = 45
+    rad = math.radians(base_angle)
+    # End-point direction
+    ex = bx + length * math.cos(rad)
+    ey = by + length * math.sin(rad) * -1  # negative = upward
+
+    # Control points — curl bends the tip inward
+    cp1x = bx + 20 * math.cos(rad + 0.3)
+    cp1y = by - 20
+    cp2x = ex + curl * 25
+    cp2y = ey - curl * 20
+
+    path = QPainterPath()
+    path.moveTo(bx, by)
+    path.cubicTo(cp1x, cp1y, cp2x, cp2y, ex, ey)
+
+    p.setPen(QPen(FUR_DARK, TAIL_W, Qt.SolidLine, Qt.RoundCap))
+    p.setBrush(Qt.NoBrush)
+    p.drawPath(path)
+    # Slightly thinner orange core
+    p.setPen(QPen(FUR, TAIL_W - 2.5, Qt.SolidLine, Qt.RoundCap))
+    p.drawPath(path)
+
+
+def draw_tongue(p: QPainter, tx: float, ty: float, size: float = 5):
+    """Small pink tongue for grooming."""
+    p.setPen(Qt.NoPen)
+    p.setBrush(QBrush(TONGUE_C))
+    p.drawEllipse(QPointF(tx, ty), size, size * 1.3)
+
+
+# ╔═════════════════════════════════════════════════════════════════════════╗
+# ║  DESKTOP PET                                                           ║
+# ╚═════════════════════════════════════════════════════════════════════════╝
+
 class DesktopPet(QWidget):
-
     def __init__(self):
         super().__init__()
-
-        # ---- Window: frameless, transparent, always on top ----
-        # NOTE: macOS-specific - use SplashScreen flag instead of Tool which
-        # was hiding the window on some macOS versions. Also avoid
-        # WindowDoesNotAcceptFocus which can prevent rendering entirely.
         self.setWindowFlags(
             Qt.FramelessWindowHint
             | Qt.WindowStaysOnTopHint
-            | Qt.SplashScreen               # show across spaces, no dock icon
+            | Qt.SplashScreen
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_AlwaysStackOnTop)
-        self.setAttribute(Qt.WA_ShowWithoutActivating)  # don't steal focus
-
-        # Debug mode: pass DESKTOP_PET_DEBUG=1 env var to see a red border
-        # around the widget so you can locate the cat on your screen.
-        import os
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
         self._debug = os.environ.get("DESKTOP_PET_DEBUG") == "1"
-
         self.resize(WIDGET_W, WIDGET_H)
 
-        # ---- Screen bounds ----
         screen = QApplication.primaryScreen().availableGeometry()
         self.screen_rect = screen
 
-        # ---- Initial state ----
         self.state          = "idle"
         self.frame_idx      = 0
-        self.direction      = random.choice([-1, 1])   # -1 left, +1 right
+        self.direction      = random.choice([-1, 1])
         self.state_ticks    = 0
         self.state_duration = random.randint(*DURATIONS["idle"])
+        self.thought        = None
+        self.thought_ticks  = 0
+        self.dragging       = False
+        self.drag_offset    = QPoint()
 
-        # ---- Thought bubble ----
-        self.thought       = None
-        self.thought_ticks = 0
+        sx = random.randint(100, max(101, screen.width() - 200))
+        sy = screen.height() - WIDGET_H - 40
+        self.move(sx, sy)
 
-        # ---- Mouse / drag ----
-        self.dragging    = False
-        self.drag_offset = QPoint()
-
-        # ---- Spawn position: bottom of screen, random x ----
-        start_x = random.randint(100, max(101, screen.width() - 200))
-        start_y = screen.height() - WIDGET_H - 40
-        self.move(start_x, start_y)
-
-        # ---- Animation timer ----
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
         self.timer.start(TICK_MS)
@@ -139,94 +340,265 @@ class DesktopPet(QWidget):
         self.show()
         self.raise_()
         self.activateWindow()
-
-        # ---- Debug info to stderr ----
         print(
             f"[DesktopPet] screen={screen.width()}x{screen.height()} "
-            f"pos=({start_x},{start_y}) size=({WIDGET_W}x{WIDGET_H}) "
-            f"visible={self.isVisible()}",
+            f"pos=({sx},{sy}) visible={self.isVisible()}",
             file=sys.stderr, flush=True,
         )
 
-    # ------------------------------------------------------------------
-    # Painting
-    # ------------------------------------------------------------------
+    # ==================================================================
+    #  PAINT
+    # ==================================================================
     def paintEvent(self, _event):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setRenderHint(QPainter.TextAntialiasing)
 
-        # Debug: draw a red border + crosshair so you can locate the widget
+        # Paint a nearly-invisible fill so macOS doesn't pass clicks
+        # through fully-transparent pixels to the desktop behind us.
+        p.fillRect(0, 0, WIDGET_W, WIDGET_H, QColor(0, 0, 0, 1))
+
         if self._debug:
             p.setPen(QPen(QColor(255, 0, 0, 200), 2))
-            p.setBrush(QBrush(QColor(255, 255, 0, 60)))
+            p.setBrush(QBrush(QColor(255, 255, 0, 40)))
             p.drawRect(0, 0, WIDGET_W - 1, WIDGET_H - 1)
-            p.drawLine(0, WIDGET_H // 2, WIDGET_W, WIDGET_H // 2)
-            p.drawLine(WIDGET_W // 2, 0, WIDGET_W // 2, WIDGET_H)
 
-        # Speech bubble (top of widget)
         if self.thought:
             self._draw_thought(p, self.thought)
 
-        # Pet emoji (bottom of widget)
-        emoji = FRAMES[self.state][self.frame_idx % len(FRAMES[self.state])]
-        font = QFont("Apple Color Emoji", EMOJI_SIZE)
-        p.setFont(font)
-
-        pet_rect = QRect(0, WIDGET_H - WIDGET_W, WIDGET_W, WIDGET_W)
-
-        # Mirror horizontally if facing left
         p.save()
         if self.direction == -1:
             p.translate(WIDGET_W, 0)
             p.scale(-1, 1)
-        p.drawText(pet_rect, Qt.AlignCenter, emoji)
+        self._draw_cat(p)
         p.restore()
 
+    # ------------------------------------------------------------------
+    #  Cat dispatcher
+    # ------------------------------------------------------------------
+    def _draw_cat(self, p):
+        s = self.state
+        f = self.frame_idx % NFRAMES.get(s, 4)
+        {
+            "walk":    self._pose_walk,
+            "curious": self._pose_walk,
+            "run":     self._pose_run,
+            "idle":    self._pose_idle,
+            "groom":   self._pose_groom,
+            "sleep":   self._pose_sleep,
+            "play":    self._pose_play,
+        }.get(s, self._pose_idle)(p, f)
+
+    # ------------------------------------------------------------------
+    #  WALK  (8 frames)
+    # ------------------------------------------------------------------
+    def _pose_walk(self, p, f):
+        t = f / 8.0
+        ang = t * 2 * math.pi
+        bob = math.sin(ang * 2) * 2.5
+
+        bcx = WIDGET_W / 2
+        bcy = GROUND_Y - LEG_H - BODY_RY + bob
+
+        # back legs
+        draw_leg(p, bcx - BODY_RX + 14, GROUND_Y, math.sin(ang + math.pi) * 10)
+        draw_leg(p, bcx + BODY_RX - 14, GROUND_Y, math.sin(ang) * 10)
+        # tail
+        draw_tail(p, bcx - BODY_RX - 2, bcy - 4,
+                  curl=0.45 + 0.15 * math.sin(ang), base_angle=135)
+        # body
+        draw_body(p, bcx, bcy)
+        # front legs
+        draw_leg(p, bcx - BODY_RX + 20, GROUND_Y, math.sin(ang) * 10)
+        draw_leg(p, bcx + BODY_RX - 8, GROUND_Y, math.sin(ang + math.pi) * 10)
+        # head
+        hx = bcx + BODY_RX + HEAD_R * 0.45
+        hy = bcy - BODY_RY * 0.55 + bob
+        draw_head(p, hx, hy, eye_open=1.0)
+
+    # ------------------------------------------------------------------
+    #  RUN  (6 frames)
+    # ------------------------------------------------------------------
+    def _pose_run(self, p, f):
+        t = f / 6.0
+        ang = t * 2 * math.pi
+        bob = math.sin(ang * 2) * 4
+        stretch = 1.1 + 0.08 * math.sin(ang * 2)
+
+        bcx = WIDGET_W / 2
+        bcy = GROUND_Y - LEG_H - BODY_RY + bob - 4
+
+        draw_leg(p, bcx - BODY_RX * stretch + 10, GROUND_Y,
+                 math.sin(ang + math.pi) * 18)
+        draw_leg(p, bcx + BODY_RX * stretch - 10, GROUND_Y,
+                 math.sin(ang) * 18)
+        draw_tail(p, bcx - BODY_RX * stretch - 2, bcy,
+                  curl=0.2 + 0.2 * math.sin(ang), base_angle=160)
+        draw_body(p, bcx, bcy, rx=BODY_RX * stretch, ry=BODY_RY * 0.85)
+        draw_leg(p, bcx - BODY_RX * stretch + 18, GROUND_Y,
+                 math.sin(ang) * 18)
+        draw_leg(p, bcx + BODY_RX * stretch - 4, GROUND_Y,
+                 math.sin(ang + math.pi) * 18)
+        hx = bcx + BODY_RX * stretch + HEAD_R * 0.4
+        hy = bcy - BODY_RY * 0.5 + bob
+        draw_head(p, hx, hy, eye_open=0.85)
+
+    # ------------------------------------------------------------------
+    #  IDLE / SIT  (4 frames — occasional blink)
+    # ------------------------------------------------------------------
+    def _pose_idle(self, p, f):
+        bcx = WIDGET_W / 2
+        bcy = GROUND_Y - BODY_RY * 0.9          # body lower (sitting)
+        breath = math.sin(f / 4.0 * math.pi) * 1.5
+
+        # Tucked legs (small visible paws)
+        draw_leg(p, bcx - 14, GROUND_Y, 0, shorter=True)
+        draw_leg(p, bcx + 14, GROUND_Y, 0, shorter=True)
+
+        # Tail wraps in front
+        draw_tail(p, bcx - BODY_RX + 2, bcy + 4,
+                  curl=0.8, base_angle=200)
+
+        # Body (slightly rounder when sitting)
+        draw_body(p, bcx, bcy + breath, rx=BODY_RX * 0.88,
+                  ry=BODY_RY * 1.1)
+
+        # Head
+        hx = bcx + BODY_RX * 0.3
+        hy = bcy - BODY_RY * 1.15 + breath
+        eye = 0.1 if f == 3 else 1.0       # blink on frame 3
+        draw_head(p, hx, hy, eye_open=eye)
+
+    # ------------------------------------------------------------------
+    #  GROOM  (8 frames — head turns back, tongue licks body)
+    # ------------------------------------------------------------------
+    def _pose_groom(self, p, f):
+        bcx = WIDGET_W / 2
+        bcy = GROUND_Y - BODY_RY * 0.9
+
+        draw_leg(p, bcx - 14, GROUND_Y, 0, shorter=True)
+        draw_leg(p, bcx + 14, GROUND_Y, 0, shorter=True)
+        draw_tail(p, bcx - BODY_RX + 2, bcy + 4,
+                  curl=0.75, base_angle=200)
+        draw_body(p, bcx, bcy, rx=BODY_RX * 0.88, ry=BODY_RY * 1.1)
+
+        # Head turns to look back at body — position shifts left & down
+        progress = min(f / 3.0, 1.0)          # 0→1 as head turns
+        hx = bcx + BODY_RX * 0.3 - progress * BODY_RX * 0.55
+        hy = bcy - BODY_RY * 1.15 + progress * 12
+
+        # Draw head facing backwards
+        draw_head(p, hx, hy, eye_open=0.6, look_back=(progress > 0.5))
+
+        # Tongue licking body (visible on frames 2–6)
+        if 2 <= f <= 6:
+            lick_bob = math.sin(f * 1.5) * 2
+            draw_tongue(p, hx - 8, hy + HEAD_R + 2 + lick_bob,
+                        size=4 + abs(lick_bob))
+
+    # ------------------------------------------------------------------
+    #  SLEEP  (4 frames — curled, breathing)
+    # ------------------------------------------------------------------
+    def _pose_sleep(self, p, f):
+        breath = math.sin(f / 4.0 * math.pi) * 2
+        bcx = WIDGET_W / 2
+        bcy = GROUND_Y - BODY_RY * 0.65 + breath
+
+        # Tail wraps around the front
+        draw_tail(p, bcx + BODY_RX * 0.7, bcy + 6,
+                  curl=0.95, base_angle=20)
+
+        # Rounder curled body
+        draw_body(p, bcx, bcy, rx=BODY_RX * 0.8,
+                  ry=BODY_RY * 0.95, angle=-8)
+
+        # Tiny tucked paws just visible at front
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(FUR_DARK))
+        for dx in (-6, 6):
+            p.drawEllipse(QPointF(bcx + BODY_RX * 0.55 + dx,
+                                  bcy + BODY_RY * 0.5), 5, 4)
+
+        # Head resting on paws
+        hx = bcx + BODY_RX * 0.45
+        hy = bcy - BODY_RY * 0.4 + breath
+        draw_head(p, hx, hy, eye_open=0.0)     # eyes closed
+
+        # "zzz" floating above
+        if f % 2 == 0:
+            p.setPen(QPen(QColor(120, 120, 180, 180), 1.5))
+            zfont = QFont(".AppleSystemUIFont", 11)
+            p.setFont(zfont)
+            p.drawText(QPointF(hx + 18, hy - 22), "z")
+            zfont.setPointSize(9)
+            p.setFont(zfont)
+            p.drawText(QPointF(hx + 28, hy - 32), "z")
+
+    # ------------------------------------------------------------------
+    #  PLAY  (6 frames — bouncy)
+    # ------------------------------------------------------------------
+    def _pose_play(self, p, f):
+        t = f / 6.0
+        ang = t * 2 * math.pi
+        jump = abs(math.sin(ang)) * 15       # hop height
+        bob = math.sin(ang * 2) * 2
+
+        bcx = WIDGET_W / 2
+        bcy = GROUND_Y - LEG_H - BODY_RY - jump
+
+        draw_leg(p, bcx - BODY_RX + 14, GROUND_Y - jump * 0.4,
+                 math.sin(ang) * 12)
+        draw_leg(p, bcx + BODY_RX - 14, GROUND_Y - jump * 0.4,
+                 math.sin(ang + math.pi) * 12)
+        draw_tail(p, bcx - BODY_RX - 2, bcy,
+                  curl=0.3 + 0.4 * abs(math.sin(ang)), base_angle=120)
+        draw_body(p, bcx, bcy + bob)
+        draw_leg(p, bcx - BODY_RX + 20, GROUND_Y - jump * 0.4,
+                 math.sin(ang + math.pi) * 12)
+        draw_leg(p, bcx + BODY_RX - 8, GROUND_Y - jump * 0.4,
+                 math.sin(ang) * 12)
+        hx = bcx + BODY_RX + HEAD_R * 0.45
+        hy = bcy - BODY_RY * 0.55
+        draw_head(p, hx, hy, eye_open=1.0)
+
+    # ==================================================================
+    #  Thought bubble (unchanged)
+    # ==================================================================
     def _draw_thought(self, p, text):
         font = QFont(".AppleSystemUIFont", 13)
         p.setFont(font)
         metrics = QFontMetrics(font)
-        text_w = metrics.horizontalAdvance(text)
-        text_h = metrics.height()
-
-        pad_x, pad_y = 12, 6
-        bubble_w = text_w + pad_x * 2
-        bubble_h = text_h + pad_y * 2
-        bubble_x = (WIDGET_W - bubble_w) // 2
-        bubble_y = 6
-
-        # Bubble background
+        tw = metrics.horizontalAdvance(text)
+        th = metrics.height()
+        px, py = 12, 6
+        bw = tw + px * 2
+        bh = th + py * 2
+        bx = (WIDGET_W - bw) // 2
+        by = 4
         p.setBrush(QBrush(QColor(255, 255, 255, 235)))
         p.setPen(QPen(QColor(80, 80, 80, 200), 1.4))
-        p.drawRoundedRect(bubble_x, bubble_y, bubble_w, bubble_h, 12, 12)
-
-        # Bubble tail (little triangle pointing down to the cat)
+        p.drawRoundedRect(bx, by, bw, bh, 12, 12)
         tail_x = WIDGET_W // 2
-        tail_y = bubble_y + bubble_h
+        tail_y = by + bh
         p.setBrush(QBrush(QColor(255, 255, 255, 235)))
         p.drawPolygon([
             QPoint(tail_x - 6, tail_y - 1),
             QPoint(tail_x + 6, tail_y - 1),
             QPoint(tail_x,     tail_y + 8),
         ])
-
-        # Text
         p.setPen(QColor(40, 40, 40))
-        p.drawText(
-            QRect(bubble_x, bubble_y, bubble_w, bubble_h),
-            Qt.AlignCenter,
-            text,
-        )
+        p.drawText(QRect(bx, by, bw, bh), Qt.AlignCenter, text)
 
-    # ------------------------------------------------------------------
-    # Tick loop
-    # ------------------------------------------------------------------
+    # ==================================================================
+    #  Tick
+    # ==================================================================
     def _tick(self):
-        self.frame_idx   += 1
+        if self.state == "run":
+            self.frame_idx += 1
+        elif self.state_ticks % 2 == 0:
+            self.frame_idx += 1
         self.state_ticks += 1
 
-        # Thought bubble lifecycle
         if self.thought_ticks > 0:
             self.thought_ticks -= 1
             if self.thought_ticks == 0:
@@ -235,21 +607,19 @@ class DesktopPet(QWidget):
             self.thought = random.choice(THOUGHTS)
             self.thought_ticks = 22
 
-        # Movement
         if self.state == "curious":
             self._move_toward_cursor()
         else:
             self._move_horizontal()
 
-        # State transition
         if self.state_ticks >= self.state_duration:
             self._transition()
 
         self.update()
 
-    # ------------------------------------------------------------------
-    # Movement
-    # ------------------------------------------------------------------
+    # ==================================================================
+    #  Movement
+    # ==================================================================
     def _move_horizontal(self):
         speed = SPEEDS[self.state]
         if speed == 0:
@@ -265,29 +635,28 @@ class DesktopPet(QWidget):
         self.move(new_x, self.y())
 
     def _move_toward_cursor(self):
-        cursor   = QCursor.pos()
-        center_x = self.x() + WIDGET_W // 2
-        dx       = cursor.x() - center_x
+        cur = QCursor.pos()
+        cx = self.x() + WIDGET_W // 2
+        dx = cur.x() - cx
         if abs(dx) < 30:
             return
         speed = SPEEDS["curious"]
-        step  = max(-speed, min(speed, dx // 6))
+        step = max(-speed, min(speed, dx // 6))
         self.direction = 1 if step > 0 else -1
-        new_x = self.x() + step
-        new_x = max(0, min(self.screen_rect.width() - WIDGET_W, new_x))
-        self.move(new_x, self.y())
+        nx = max(0, min(self.screen_rect.width() - WIDGET_W, self.x() + step))
+        self.move(nx, self.y())
 
     def _transition(self):
         self.state          = random.choice(TRANSITIONS[self.state])
         self.frame_idx      = 0
         self.state_ticks    = 0
         self.state_duration = random.randint(*DURATIONS[self.state])
-        if random.random() < 0.4:
+        if self.state in ("walk", "run") and random.random() < 0.35:
             self.direction *= -1
 
-    # ------------------------------------------------------------------
-    # Mouse interaction
-    # ------------------------------------------------------------------
+    # ==================================================================
+    #  Mouse interaction
+    # ==================================================================
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.dragging    = True
@@ -311,18 +680,16 @@ class DesktopPet(QWidget):
         self.thought       = random.choice(["meow!", "purr~", "love u", "🐾"])
         self.thought_ticks = 22
 
-    # ------------------------------------------------------------------
-    # Context menu
-    # ------------------------------------------------------------------
     def _show_menu(self, pos):
         menu = QMenu(self)
         for label, state in [
-            ("😺   Walk",    "walk"),
+            ("🐈   Walk",    "walk"),
             ("💨   Run",     "run"),
             ("😴   Sleep",   "sleep"),
-            ("😸   Play",    "play"),
-            ("😼   Curious", "curious"),
-            ("🐱   Idle",    "idle"),
+            ("🐾   Play",    "play"),
+            ("👀   Curious", "curious"),
+            ("👅   Groom",   "groom"),
+            ("🪑   Idle",    "idle"),
         ]:
             menu.addAction(label, lambda s=state: self._set_state(s))
         menu.addSeparator()
@@ -336,8 +703,6 @@ class DesktopPet(QWidget):
         self.state_duration = random.randint(*DURATIONS[state])
 
 
-# ---------------------------------------------------------------------------
-# Entry point
 # ---------------------------------------------------------------------------
 def main():
     app = QApplication(sys.argv)

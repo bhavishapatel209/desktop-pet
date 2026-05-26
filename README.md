@@ -1,6 +1,6 @@
 # 🐱 Desktop Pet
 
-A **smart floating cat** that lives on your macOS desktop. It walks across the screen, naps, plays, gets curious about your cursor, and even thinks in little speech bubbles.
+A **smooth cartoon orange tabby** that lives on your macOS desktop. It walks across the screen, sits, **stops to groom itself**, naps, plays, gets curious about your cursor, and thinks little thoughts in floating speech bubbles.
 
 ![macOS](https://img.shields.io/badge/macOS-supported-success)
 ![Python](https://img.shields.io/badge/python-3.8%2B-blue)
@@ -8,12 +8,13 @@ A **smart floating cat** that lives on your macOS desktop. It walks across the s
 
 ## ✨ Features
 
-- 🐈 Floating, transparent, always-on-top cat — wanders your entire screen
-- 🧠 **6 behaviors**: idle, walk, run, sleep, play, curious (follows cursor)
+- 🐈 Smooth vector-drawn orange tabby — transparent, floating, always on top
+- 🧠 **7 behaviors**: idle, walk, run, sleep, play, curious (follows cursor), **groom** (licks itself)
+- 🎞️ Animated walk, run, sit, groom, and sleep cycles — all drawn with anti-aliased QPainter shapes
 - 💬 Random thoughts shown in speech bubbles ("meow~", "snack?", "purr...")
 - 🖱️ **Interactive** — drag with mouse, double-click to react, right-click for menu
-- 🔄 Auto state transitions with weighted probabilities
-- 🪶 Single Python file, fully customizable
+- 🔄 Realistic state transitions: sit → groom → walk → sit → nap...
+- 🪶 Single Python file, no external assets needed; fully customizable
 
 ## 🎮 Controls
 
@@ -51,7 +52,7 @@ The cat has a fully transparent background, so it can be hard to spot at first. 
 DESKTOP_PET_DEBUG=1 ./venv/bin/python desktop_pet.py
 ```
 
-Once you spot it, run again without `DESKTOP_PET_DEBUG=1` for the clean look. You can also bump up `EMOJI_SIZE` in `desktop_pet.py` to make the cat bigger.
+Once you spot it, run again without `DESKTOP_PET_DEBUG=1` for the clean look.
 
 </details>
 
@@ -71,16 +72,17 @@ python desktop_pet.py
 
 ## 🎬 States
 
-| State | What it does | Avg. Duration |
+| State | What the cat does | Avg. Duration |
 |---|---|---|
-| 🐱 Idle | Sits and blinks | ~5 s |
-| 😺 Walk | Strolls horizontally | ~10–15 s |
+| 🪑 Idle | Sits and looks around | ~3–7 s |
+| 👅 Groom | Stops to lick its body | ~3–8 s |
+| 🐈 Walk | Strolls horizontally | ~6–15 s |
 | 💨 Run | Zooms across the screen | ~3–5 s |
-| 😴 Sleep | Curls up for a nap | ~10–20 s |
-| 😸 Play | Bounces around playfully | ~4–7 s |
-| 😼 Curious | Walks toward your cursor | ~4–8 s |
+| 😴 Sleep | Curls up for a nap | ~7–18 s |
+| 🐾 Play | Bounces around playfully | ~3–7 s |
+| 👀 Curious | Walks toward your cursor | ~4–8 s |
 
-The cat **picks states on its own** with weighted random transitions — but you can override it any time via right-click menu.
+The cat **picks states on its own** with weighted random transitions — but you can override it any time via the right-click menu.
 
 ## 🛠️ Customization
 
@@ -88,15 +90,14 @@ Open `desktop_pet.py` and edit the top-level constants:
 
 | Constant | Purpose |
 |---|---|
-| `FRAMES` | Emoji frames per state |
 | `SPEEDS` | Movement speed (px/tick) per state |
 | `DURATIONS` | How long each state lasts (in ticks) |
 | `TRANSITIONS` | Weighted next-state choices |
 | `THOUGHTS` | Random speech-bubble lines |
-| `EMOJI_SIZE` | How big your cat appears |
+| `FUR` / `FUR_DARK` / `BELLY` | Colour palette — change to make a grey, black, or calico cat |
 | `TICK_MS` | Animation tick rate (lower = smoother) |
 
-Want a dog instead of a cat? Just change the emoji in `FRAMES`. 🐶
+Want a grey cat? Change `FUR` to `QColor(160, 160, 165)` and `FUR_DARK` to `QColor(120, 120, 125)`. 🐈‍⬛
 
 ## 📦 Make it a Standalone App (Optional)
 
@@ -112,10 +113,11 @@ The packaged `.app` will be in `dist/`. Drag it to `/Applications` and add it to
 
 ## 🧩 How It Works
 
-- Uses **PySide6** (Qt for Python) for a frameless, transparent, always-on-top window
-- A `QTimer` ticks every 120 ms — advances frames, moves the pet, manages state
-- The pet emoji is rendered with **Apple Color Emoji** and flipped via `QPainter` when it changes direction
-- The widget itself is just `WIDGET_W × WIDGET_H` pixels — the rest of your screen stays clickable
+- **PySide6** (Qt for Python) creates a frameless, transparent, always-on-top window
+- A `QTimer` ticks every 100 ms — advances frames, moves the pet, manages state
+- The cat is drawn entirely with **QPainter** — ellipses, Bézier curves, and polygons — so it's smooth and crisp at any DPI
+- The pet is auto-mirrored via `QPainter.scale(-1, 1)` when it changes direction
+- The widget itself is `260 × 220` pixels — the rest of your screen stays clickable
 
 ## 📄 License
 
