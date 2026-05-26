@@ -21,15 +21,36 @@ A tiny animated cat that lives in your **macOS menu bar** — walks, runs, sleep
 
 ## 🚀 Quick Start
 
-```bash
-# 1. Install dependency
-pip install rumps
+> **Requires:** Python 3.8+ on macOS
 
-# 2. Run it
-python desktop_pet.py
+```bash
+# 1. Clone the repo
+git clone https://github.com/bhavishapatel209/desktop-pet.git
+cd desktop-pet
+
+# 2. Create a virtual environment & install rumps
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt
+
+# 3. Run it
+./venv/bin/python desktop_pet.py
 ```
 
 Your cat will appear in the menu bar. Click it to control state or quit.
+
+<details>
+<summary><b>Why a virtual environment?</b></summary>
+
+Modern macOS (with Homebrew Python) blocks system-wide `pip install` via [PEP 668](https://peps.python.org/pep-0668/) to prevent breaking your system. A virtual environment (`venv/`) keeps the project's dependencies isolated and avoids that error.
+
+Prefer to activate the venv once and just type `python`?
+
+```bash
+source venv/bin/activate
+python desktop_pet.py
+```
+
+</details>
 
 ## 🎬 States
 
@@ -54,10 +75,12 @@ Open `desktop_pet.py` and edit:
 To run it as a real `.app` that auto-starts at login:
 
 ```bash
-pip install py2app
-py2applet --make-setup desktop_pet.py
-python setup.py py2app
+./venv/bin/pip install py2app
+./venv/bin/py2applet --make-setup desktop_pet.py
+./venv/bin/python setup.py py2app
 ```
+
+The packaged `.app` will be in `dist/`. Drag it to `/Applications` and add it to **System Settings → General → Login Items** to auto-start on boot.
 
 ## 📄 License
 
