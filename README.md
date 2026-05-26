@@ -4,6 +4,13 @@ A tiny animated cat that lives in your **macOS menu bar** — walks, runs, sleep
 
 ![macOS](https://img.shields.io/badge/macOS-supported-success)
 ![Python](https://img.shields.io/badge/python-3.8%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+## 📺 Preview
+
+![Demo](assets/demo.svg)
+
+> 💡 **Want to add your own screenshot?** Run the app, take a screenshot of your menu bar with `⌘ + Shift + 4`, save it as `assets/screenshot.png`, and reference it here.
 
 ## ✨ Features
 

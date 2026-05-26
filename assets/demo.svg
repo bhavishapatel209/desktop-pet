@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="240" viewBox="0 0 720 240">
+  <defs>
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2b2b2b"/>
+      <stop offset="100%" stop-color="#1f1f1f"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Title -->
+  <text x="14" y="20" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#666" font-weight="600">
+    macOS Menu Bar — Your Pet in Action
+  </text>
+
+  <!-- ============= WALK STATE ============= -->
+  <g transform="translate(0, 35)">
+    <rect width="720" height="32" fill="url(#bar)"/>
+    <text x="14"  y="22" font-family="-apple-system, system-ui, sans-serif" font-size="16" fill="#fff"></text>
+    <text x="40"  y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff" font-weight="600">Finder</text>
+    <text x="92"  y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff">File</text>
+    <text x="122" y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff">Edit</text>
+    <text x="500" y="22" font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" font-size="16">🐱</text>
+    <text x="540" y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff">100%</text>
+    <text x="585" y="22" font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" font-size="14">📶</text>
+    <text x="620" y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff">11:23 AM</text>
+    <text x="14"  y="55" font-family="-apple-system, system-ui, sans-serif" font-size="11" fill="#888" font-style="italic">
+      😺 Walking — strolls across the menu bar (~25s)
+    </text>
+  </g>
+
+  <!-- ============= RUN STATE ============= -->
+  <g transform="translate(0, 105)">
+    <rect width="720" height="32" fill="url(#bar)"/>
+    <text x="14"  y="22" font-family="-apple-system, system-ui, sans-serif" font-size="16" fill="#fff"></text>
+    <text x="40"  y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff" font-weight="600">Finder</text>
+    <text x="92"  y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff">File</text>
+    <text x="122" y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff">Edit</text>
+    <text x="488" y="22" font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" font-size="16">💨🐱</text>
+    <text x="540" y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff">100%</text>
+    <text x="585" y="22" font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" font-size="14">📶</text>
+    <text x="620" y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff">11:23 AM</text>
+    <text x="14"  y="55" font-family="-apple-system, system-ui, sans-serif" font-size="11" fill="#888" font-style="italic">
+      💨 Running — zooms across with energy (~8s)
+    </text>
+  </g>
+
+  <!-- ============= SLEEP STATE ============= -->
+  <g transform="translate(0, 175)">
+    <rect width="720" height="32" fill="url(#bar)"/>
+    <text x="14"  y="22" font-family="-apple-system, system-ui, sans-serif" font-size="16" fill="#fff"></text>
+    <text x="40"  y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff" font-weight="600">Finder</text>
+    <text x="92"  y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff">File</text>
+    <text x="122" y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff">Edit</text>
+    <text x="494" y="22" font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" font-size="16">😴💤</text>
+    <text x="540" y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff">100%</text>
+    <text x="585" y="22" font-family="Apple Color Emoji, Segoe UI Emoji, sans-serif" font-size="14">📶</text>
+    <text x="620" y="22" font-family="-apple-system, system-ui, sans-serif" font-size="13" fill="#fff">11:23 AM</text>
+    <text x="14"  y="55" font-family="-apple-system, system-ui, sans-serif" font-size="11" fill="#888" font-style="italic">
+      😴 Sleeping — takes a cozy nap (~22s)
+    </text>
+  </g>
+</svg>
