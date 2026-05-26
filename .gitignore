@@ -26,3 +26,10 @@ env/
 
 # py2app build artifacts
 setup.py.bak
+
+# Compiled Swift calendar helper
+.cal_helper
+
+# Google Calendar credentials & tokens
+credentials.json
+token.json
